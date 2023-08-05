@@ -1,72 +1,747 @@
-version: 2.1 
+14
+Jump to Comments
+75
+Save
 
-orbs:
-  win:  ubuntu-latest
+Cover image for ✨ A practical guide to GitHub Actions: build & deploy a static 11ty website to remote virtual server after push
+Vic Shóstak
+Vic Shóstak
+Posted on Jun 2, 2020 • Updated on Jun 27, 2020
+
+
+38
+
+11
+✨ A practical guide to GitHub Actions: build & deploy a static 11ty website to remote virtual server after push
+#
+webdev
+#
+devops
+#
+tutorial
+#
+github
+GitHub Actions (4 Part Series)
+1
+✨ A practical guide to GitHub Actions: build & deploy a static 11ty website to remote virtual server after push
+2
+⚡️ Create your first GitHub action in 6 minutes
+3
+🔗 Personal URL shortener on your domain with automation through GitHub Actions
+4
+🚀 GitHub Action for release your Go projects as fast and easily as possible
+Introduction
+Hey, DEV community 🖖 It's a long time since I saw you last!
+
+I want to share with you some great news from the CI/CD world: GitHub has finally released its automation tool for all users! Let's look at a comprehensive real-life example, that will help you understand and start working with GitHub Actions faster! 👍
+
+
+📝 Table of contents
+What's GitHub Actions?
+Why would you love it?
+Preparation stage
+11ty aka Eleventy
+Droplet on DigitalOcean
+Private SSH key
+Helpful plugins for GitHub Actions
+GitHub Actions config
+Understanding the GitHub secrets
+Deploy to remote server via SSH
+Questions for better understanding
+Exercises for independent execution
+
+🤔 What's a GitHub Actions?
+GitHub Actions makes it easy to automate all your software workflows, now with world-class CI/CD. Build, test, and deploy your code right from GitHub, make code reviews, branch management, and issue triaging work the way you want... and absolutely free for Open Source public repositories!
+
+GitHub Actions
+
+
+❤️ Why would you love it too?
+Linux, macOS, Windows, ARM, and containers. Hosted runners for every major OS make it easy to build and test all your projects. Run directly on a VM or inside a container. Use your own VMs, in the cloud or on-prem, with self-hosted runners.
+Matrix builds. Save time with matrix workflows that simultaneously test across multiple operating systems and versions of your runtime.
+Any language. GitHub Actions supports Node.js, Python, Java, Ruby, PHP, Go, Rust, .NET and more. Build, test, and deploy applications in your language of choice.
+Live logs. See your workflow run in realtime with color and emoji. It’s one click to copy a link that highlights a specific line number to share a CI/CD failure.
+Built in secret store. Automate your software development practices with workflow files embracing the Git flow by codifying it in your repository.
+Multi-container testing. Test your web service and its DB in your workflow by simply adding some docker-compose to your workflow file.
+↑ Table of contents
+
+
+📚 Preparation stage
+Okay, well, I hope there are fewer questions now. So, what are we going to deploy and where? As you may have already understood from the title of the article, it will be:
+
+11ty (or Eleventy), as a static website generator
+Droplet on DigitalOcean, as a remote virtual server
+Ubuntu 18.04 LTS, as a server operating system
+Let's take a project, like this, as a basis:
+.
+├── .eleventy.js
+├── .gitignore
+├── .github
+│   └── workflows
+│       └── ssh_deploy.yml
+├── package.json
+└── src
+    ├── _includes
+    │   ├── css
+    │   │   └── style.css
+    │   └── layouts
+    │       └── base.njk
+    ├── images
+    │   └── logo.svg
+    └── index.njk
+☝️ Tip: As usual, you can grab production ready project code from this GitHub repository → https://github.com/koddr/example-github-actions
+
+Sounds easy, let's see how it really is 👀
+
+↑ Table of contents
+
+11ty
+
+
+✅ 11ty aka Eleventy
+Eleventy is a simpler static site generator, which was created to be a JavaScript alternative to Jekyll. It’s zero-config, by default, but has flexible configuration options. 11ty is not a JavaScript framework, that means zero boilerplate client-side JavaScript and works with multiple template languages:
+
+template languages
+
+Of all templates engines, I like to work with Nunjucks. It's very similar to jinja2, but supported by Mozilla. Also, I'd like all CSS styles to be optimized, minimized and included in the final HTML document. CleanCSS package will help me in this.
+
+My working Eleventy config looks like this:
+// .eleventy.js
+
+const CleanCSS = require("clean-css"); // npm i --save-dev clean-css
+
+module.exports = function (eleventyConfig) {
+  // Copy all images to output folder
+  eleventyConfig.addPassthroughCopy("src/images");
+
+  // Optimized, minimized and included CSS to final HTML
+  eleventyConfig.addFilter("cssmin", function (code) {
+    return new CleanCSS({}).minify(code).styles;
+  });
+
+  return {
+    dir: { 
+      input: "src",                  // input folder name
+      output: "dist",                // output folder name
+    },
+    passthroughFileCopy: true,       // allows to copy files to output folder
+    htmlTemplateEngine: "njk",       // choose Nunjucks template engine
+    templateFormats: ["njk", "css"],
+  };
+};
+Basic layout template:
+<!-- src/_includes/layouts/base.njk -->
+
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{ title }}</title>
+    {% set css %}{% include "css/style.css" %}{% endset %}
+    <style>
+      {{ css | cssmin | safe }}
+    </style>
+  </head>
+  <body>
+    {{ content | safe }}
+  </body>
+</html>
+Example index page:
+<!-- src/index.njk -->
+
+---
+layout: layouts/base.njk
+title: "Hello, World!"
+---
+
+<main>
+  <section>
+    <img src="/images/logo.svg" alt="logo" />
+    <article>
+      <h1>{{ title }}</h1>
+      <p>It works via GitHub Actions 👍</p>
+    </article>
+  </section>
+</main>
+And CSS styles:
+/* src/_includes/css/style.css */
+
+:root {
+  --font-face: sans-serif;
+  --font-size: 18px;
+  --black: #444444;
+  --gray: #fafafa;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: var(--font-face);
+  font-size: var(--font-size);
+  color: var(--black);
+  background-color: var(--gray);
+}
+
+h1 {
+  font-size: calc(var(--font-size) * 2.5);
+  margin-bottom: var(--font-size);
+}
+
+main {
+  display: grid;
+  grid-template-columns: max-content;
+  row-gap: 24px;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
+
+main > * > img {
+  width: 320px;
+}
+↑ Table of contents
+
+
+✅ Droplet on DigitalOcean
+I don't think anybody's gonna be interested in watching yet another unusable in real life "Hello, World!" example, right? So, I decided to show you how to configure this remote virtual server configuration:
+
+Nginx with Brotli module and best practice config
+Redirect from www to non-www and from http to https
+Certbot with automatically renew SSL certificates for a domain
+UFW firewall with protection rules
+And yes, it would be a crime in 2020 not to use Brotli (by Google) compression format on your web server! 😉
+
+Create droplet
+Enter to your DigitalOcean account
+Don't have an account? Join DigitalOcean by my referral link (your profit is $100 and I get $25). This is my bonus for you! 🎁
+
+Click to green button Create on top and choose Droplets
+Choose Ubuntu 18.04 LTS, plan and droplet's region:
+do droplet 1
+
+Click to New SSH key button at the Authentication section:
+do droplet 2
+
+☝️ Tip: I recommend to create new SSH key for each new droplet, because it's more secure, than use same key for every droplets!
+
+Follow instruction (on right at this form) and generate SSH key
+Re-check droplet's options and click to Create Droplet
+Go to Networking section (on left menu) and add your domain:
+do droplet 3
+
+Finally, add two A records to this domain (for @ and www)
+Great! 👌 You're ready to setup your remote virtual server.
+
+Setup remote virtual server
+I won't bore you with the boring console commands listings. Because I have an amazing GitHub repository, which allows you to automate routine things by configuring GNU/Linux servers (by Ansible playbooks) 👇
+
+GitHub logo truewebartisans / useful-playbooks
+🚚 Useful Ansible playbooks for easily deploy your website or webapp to absolutely fresh remote virtual server and automation many processes. Only 3 minutes from the playbook run to complete setup server and start it.
+All I need to do is download all needed playbooks to my local machine and run it (with some extra vars):
+# Configure VDS
+ansible-playbook \
+                  new_server-playbook.yml \
+                  --user <USER> \
+                  --extra-vars "host=<HOST>"
+
+# Install Brotli module for Nginx
+ansible-playbook \
+                  install_brotli-playbook.yml \
+                  --user <USER> \
+                  --extra-vars "host=<HOST>"
+
+# Get SSL for domain
+ansible-playbook \
+                  create_ssl-playbook.yml \
+                  --user <USER> \
+                  --extra-vars "host=<HOST> domain=<DOMAIN>"
+Now, you just have to wait 5-10 minutes. As a result, all tasks (I mentioned above) have been successfully resolved.
+
+There you go! It just works!
+
+↑ Table of contents
+
+
+✅ Private SSH key
+Let's create a private SSH key for our virtual server, that will allow us to login without entering the root password. Also, you will need this key to configure GitHub Actions for deploy via SSH (it will be covered later in this article).
+
+☝️ Please note: creating key must be done on your LOCAL computer!
+
+Open terminal and run the following command:
+ssh-keygen
+☝️ Tip: Windows users can install and use PuTTY for it.
+
+You will be prompted to save and name the key. For general understanding, let's call it gha_rsa and place it in the folder ~/.ssh of your local computer (~/.ssh/gha_rsa)
+Next, you will be asked to create and confirm a passphrase for the key
+This will generate two files, called gha_rsa and gha_rsa.pub
+Continue on your virtual server
+Copy the contents of the gha_rsa.pub file (on local computer):
+cat ~/.ssh/gha_rsa.pub
+Login to your remote virtual server and create a file ~/.ssh/authorized_keys with contents of the gha_rsa.pub file:
+sudo nano ~/.ssh/authorized_keys
+Paste the SSH key to ~/.ssh/authorized_keys file
+Hit Ctrl + O to save changes and Ctrl + X to exit from editor
+Return to your local computer to complete the process
+Okay! 👌 Let's immediately add the setting to using the SSH key for fast login to your remote server from local computer.
+
+Open local SSH config file:
+sudo nano ~/.ssh/config
+Add following content to bottom of ~/.ssh/config file (don't forget to replace SERVER_SHORTCUT, SERVER_IP and SERVER_USER with your own values):
+Host SERVER_SHORTCUT
+  HostName SERVER_IP
+  Port 22
+  User SERVER_USER
+  IdentityFile ~/.ssh/gha_rsa
+  AddKeysToAgent yes
+Hit Ctrl + O to save changes and Ctrl + X to exit from editor
+Now, you can easily login to your remote virtual server, like this:
+ssh SERVER_SHORTCUT
+🎉 Congratulations, you're now fully ready to start configure GitHub Actions!
+
+↑ Table of contents
+
+plugins for GitHub Actions
+
+
+🔍 Helpful plugins for GitHub Actions
+God bless the Open Source community! 🙏
+
+Today, GitHub Actions marketplace already has a lot of helpful plugins (called in this place as action) for any case of life.
+
+☝️ Please note: some of the actions have nothing to do with GitHub. Look the source code of such actions before using them!
+
+But for now, only two will be of use to us:
+
+GitHub logo TartanLlama / actions-eleventy
+GitHub Action for generating a static website with Eleventy
+GitHub logo appleboy / scp-action
+GitHub Action that copy files and artifacts via SSH.
+↑ Table of contents
+
+
+⚙️ GitHub Actions config
+Here's config file for our workflow. Take a look for yourself, but I'll explain some of the not quite obvious settings below.
+# .github/workflows/ssh_deploy.yml
+
+name: Deploy Eleventy via SSH
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
 
 jobs:
-  build: 
-    executor:
-      name: win/default 
-      size: "medium" 
-    
+  build:
+    runs-on: ubuntu-latest
     steps:
-    - run: |
+      # Checks-out your repository under $GITHUB_WORKSPACE, 
+      # so your workflow can access it
+      - uses: actions/checkout@master
 
-sudo useradd -m NAHID
-sudo adduser NAHID sudo
-echo 'NAHID:1234' | sudo chpasswd
-sed -i 's/\/bin\/sh/\/bin\/bash/g' /etc/passwd
-sudo apt update
-wget https://dl.google.com/linux/direct/chrome-remote-desktop_current_amd64.deb
-sudo dpkg --install chrome-remote-desktop_current_amd64.deb
-sudo apt install --assume-yes --fix-broken
-sudo DEBIAN_FRONTEND=noninteractive \
-sudo apt install --assume-yes xfce4 desktop-base xfce4-terminal 
-sudo bash -c 'echo "exec /etc/X11/Xsession /usr/bin/xfce4-session" > /etc/chrome-remote-desktop-session'
-sudo apt remove --assume-yes gnome-terminal
-sudo apt install --assume-yes xscreensaver
-sudo systemctl disable lightdm.service
-wget https://dl.google.com/linux/direct/chrome-remote-desktop_current_amd64.deb
-sudo dpkg --install chrome-remote-desktop_current_amd64.deb
-sudo apt install --assume-yes --fix-broken
-sudo apt install nautilus nano -y
-sudo apt -y install obs-studio
-sudo apt -y install firefox
-sudo apt -y install qbittorrent
-sudo apt install nload
-sudo adduser NAHID chrome-remote-desktop
-} &> /dev/null &&
-printf "\nSetup Completed " >&2 ||
-printf "\nError Occured " >&2
-printf '\nCheck https://remotedesktop.google.com/headless  Copy Command Of Debian Linux And Paste Down\n'
-read -p "Paste Here: " CRP
-su - NAHID -c """$CRP"""
-printf 'Check https://remotedesktop.google.com/access/ \n'
-printf 'Your SUDO Pasword is: 1234 \n'
+      # Build your static website with Eleventy
+      - name: Build Eleventy
+        uses: TartanLlama/actions-eleventy@master
+        with:
+          args: --output html
+          install_dependencies: true
 
-
-
+      # Copying files and artifacts via SSH
+      - name: Copying files to server
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.REMOTE_HOST }}
+          username: ${{ secrets.REMOTE_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
+          rm: true
+          source: "html/"
+          target: "${{ secrets.REMOTE_DIR }}"
+Basic settings
+on — this setting tells you what to do to run workflow (in our case, it will run when you make push or pull request to the master branch of your repository)
+runs-on — allows you to define the system on which workflow will be launched (in our case, it latest Ubuntu)
+steps — all tasks (steps) of our GitHub Actions workflow will be defined in this section and will be executed one after another (downright).
+Settings for Build Eleventy step
+args: --output html — define an output folder to specify in SSH copy settings a correct folder, that corresponds to a folder on the remote server (in our case, it's /var/www/<domain>/html).
+install_dependencies: true — since we use a third-party NPM package clean-css, this setting allow workflow to build project with these dev-dependencies in mind
+Settings for Copying files to server step
+rm: true — to maintain cleanliness, I recommend enabling this setting so that the destination folder on the remote server is completely cleaned before downloading new files
+source: "html/" — defines the folder, that will be uploaded on the remote server (the mechanism of effective data compression will be used, so the uploading process will be as fast as possible... even on large projects)
+target: "${{ secrets.REMOTE_DIR }}" — full path to the folder on the remote server, where the files from source will be uploaded
+🤔 But wait! What are ${{ secrets }} variables and where will they come from? Don't worry, now you'll understand everything. Just keep reading further.
 
 
+💭 Understanding the GitHub secrets
+Secrets are environment variables, that are encrypted and only exposed to selected actions. Anyone with collaborator (access to your repository) can use these secrets only in a workflow as vars, like ${{ secrets.MY_SECRET }}.
+
+Go to Settings and next to Secrets section in your repository:
+
+GitHub secrets 1
+
+You can create a new secret, by clicking New secret button:
+
+GitHub secrets 2
+
+Please, create the same names secrets, but with your own values:
+
+REMOTE_DIR — remote folder would be /var/www/<domain>/html (don't forget to define your domain, instead of <domain> placeholder)
+REMOTE_HOST — your remote virtual server IP address
+REMOTE_USER — name of remote virtual server user, in the settings of which (~/.ssh/authorized_keys), we had previously added a PUBLIC part (~/.ssh/gha_rsa.pub) of the SSH key
+SSH_KEY — the contents of a PRIVATE part (~/.ssh/gha_rsa) of the SSH key, that we generated in Private key for SSH section of this article
+SSH_KEY_PASSPHRASE — the passphrase of the SSH key, that we entered, when generating the SSH key
+↑ Table of contents
 
 
+🚀 Deploy to server via SSH
+Just git push changes to your repository, wait for GitHub Actions and catch success status of the running job (at Actions menu):
+
+Deploy to server via SSH
+
+Okay! 🔥 Visit to your brand new 11ty website:
+
+final result
+
+↑ Table of contents
 
 
+💬 Questions for better understanding
+Why is it considered good practice to use GitHub Secrets?
+What happens, if you do not specify the install_dependencies setting in the GitHub Action config for Eleventy build step?
+Why do you need a step, that uses action actions/checkout@master?
+How can you change the name for a step? And for the workflow?
+How many steps can you set in the GitHub Action config? Find the limits on the Internet by yourself.
+What happens (or doesn't happen), if rm is set to false in the settings for a step of copying files to the remote virtual server via SSH?
+How easy is it now to deploy new servers with script to automate, which I gave in the article in section Droplet on DigitalOcean?
+Can you configure the triggering action by scheduler (for example, by CRON)? Find answer in the GitHub Actions docs.
+↑ Table of contents
 
 
+✏️ Exercises for independent execution
+Try to repeat everything you have seen in the article with your project. Please, write about your results in the comments to this article!
+Find interesting actions in the GitHub Actions marketplace and test them.
+↑ Table of contents
 
 
+Photos/Images by
+GitHub Actions promo website (link)
+11ty website (link)
+DigitalOcean dashboard (link)
+GitHub repository settings (link)
+True web artisans snippets-deploy repository (link)
+
+P.S.
+If you want more — write a comment below & follow me. Thx! 😘
+
+GitHub Actions (4 Part Series)
+1
+✨ A practical guide to GitHub Actions: build & deploy a static 11ty website to remote virtual server after push
+2
+⚡️ Create your first GitHub action in 6 minutes
+3
+🔗 Personal URL shortener on your domain with automation through GitHub Actions
+4
+🚀 GitHub Action for release your Go projects as fast and easily as possible
+Top comments (14)
+
+Subscribe
+pic
+Add to the discussion
+ 
+ 
+ravgeetdhillon profile image
+Ravgeet Dhillon
+•
+Feb 12 '21 • Edited on Feb 12
+
+Hi. Can you please tell what is SERVER_SHORTCUT?
 
 
+2
+ likes
+Like
+Reply
+ 
+ 
+koddr profile image
+Vic Shóstak 
+•
+Feb 12 '21 • Edited on Feb 12
+
+Hello. It's name of your SSH connection.
+
+For example, I always use this one:
+Host digitalocean_myproject_server
+...
+And, next on console to enter:
+ssh digitalocean_myproject_server
+
+2
+ likes
+Like
+Reply
+ 
+ 
+ravgeetdhillon profile image
+Ravgeet Dhillon
+•
+Feb 12 '21
+
+Awesome. Thanks for a great tutorial!
 
 
+2
+ likes
+Like
+Reply
+ 
+ 
+koonfoon profile image
+koonfoon
+•
+Aug 11 '20
+
+Great tutorial, thank you.
+But can the "passphrase:" be empty?
+I has a ssh key that do not need passphrase.
 
 
+2
+ likes
+Like
+Reply
+ 
+ 
+koddr profile image
+Vic Shóstak 
+•
+Aug 11 '20
+
+Hi! Good question, but IDK.
+Try to ask this here: github.com/appleboy/scp-action
 
 
+1
+ like
+Like
+Reply
+ 
+ 
+koonfoon profile image
+koonfoon
+•
+Aug 20 '20
+
+I had tried myself.
+it still work.
+👍
 
 
+2
+ likes
+Like
+Reply
+ 
+ 
+sm0ke profile image
+Sm0ke
+•
+Jun 2 '20
+
+Super nice. Thanks for sharing.
 
 
+2
+ likes
+Like
+Reply
+ 
+ 
+koddr profile image
+Vic Shóstak 
+•
+Jun 4 '20
+
+No problem! Thank you for reading 😎
 
 
+2
+ likes
+Like
+Reply
+ 
+ 
+wobsoriano profile image
+Robert
+•
+Jun 2 '20
+
+Awesome! Bookmarking this.
+
+
+2
+ likes
+Like
+Reply
+ 
+ 
+koddr profile image
+Vic Shóstak 
+•
+Jun 4 '20
+
+Thanks, you're welcome 👍
+
+
+1
+ like
+Like
+Reply
+ 
+ 
+davidyaonz profile image
+David Yao
+•
+Jun 8 '20
+
+Thanks for sharing.
+
+
+2
+ likes
+Like
+Reply
+ 
+ 
+koddr profile image
+Vic Shóstak 
+•
+Jun 8 '20
+
+You're welcome! 👍
+
+
+1
+ like
+Like
+Reply
+ 
+ 
+mariusty profile image
+mariusty
+•
+Jun 2 '20
+
+Great!
+Thanks for such a detailed tutorial
+
+
+2
+ likes
+Like
+Reply
+ 
+ 
+koddr profile image
+Vic Shóstak 
+•
+Jun 2 '20
+
+Thanks for reply! You're welcome 😉
+
+
+1
+ like
+Like
+Reply
+Code of Conduct • Report abuse
+profile
+Pulumi
+PROMOTED
+
+Pulumi for Terraform users
+
+Pulumi Infrastructure as Code - Pulumi vs Terraform
+Use languages & constructs you already know - code completion, for loops, and IDE support. All the benefits of general-purpose programming language for provisioning cloud infrastructure.
+
+Learn the Difference
+
+Read next
+bobbyiliev profile image
+Introduction to Terraform: From Zero to Hero eBook
+Bobby Iliev - Jul 24
+
+scofieldidehen profile image
+Dhiwise and Locofy: The Best AI Design To Code Converters
+Scofield Idehen - Jul 2
+
+pratik_kale profile image
+Git Lens: Advanced Git Features
+Pratik Kale - Jul 2
+
+pavanbelagatti profile image
+Microservices vs. Micro Frontends: What's the Difference?
+Pavan Belagatti - Jul 25
+
+
+Vic Shóstak
+Follow
+Hey! 👋 I'm a Software Engineer with over 13 years of practical experience, Open Source & Free Software Popularizer, UX Consultant & UI Designer
+LOCATION
+🌐 World
+WORK
+Software Engineer (Go, Python, Kotlin, TypeScript), UX Consultant
+JOINED
+Jan 5, 2020
+More from Vic Shóstak
+Kotlin short recipes: Generating a chessboard for a console game
+#kotlin #gamedev #showdev #tutorial
+🔐 Structure of a single-page Vue 3 (TypeScript) app using JWT authorization requests to the backend
+#vue #typescript #tutorial #webdev
+🎊 You don't need SVG! Creating animated loaders for content with Tailwind CSS
+#tutorial #css #html #tailwindcss
+DEV Community
+
+🤔 Ryan Carniato and Dan Abramov discuss the evolution of React!
+
+"Those who fail to learn from history are doomed to repeat it"
+React vs Signals: 10 Years Later
+
+# .github/workflows/ssh_deploy.yml
+
+name: Deploy Eleventy via SSH
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      # Checks-out your repository under $GITHUB_WORKSPACE, 
+      # so your workflow can access it
+      - uses: actions/checkout@master
+
+      # Build your static website with Eleventy
+      - name: Build Eleventy
+        uses: TartanLlama/actions-eleventy@master
+        with:
+          args: --output html
+          install_dependencies: true
+
+      # Copying files and artifacts via SSH
+      - name: Copying files to server
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.REMOTE_HOST }}
+          username: ${{ secrets.REMOTE_USER }}
+          key: ${{ secrets.SSH_KEY }}
+          passphrase: ${{ secrets.SSH_KEY_PASSPHRASE }}
+          rm: true
+          source: "html/"
+          target: "${{ secrets.REMOTE_DIR }}"
